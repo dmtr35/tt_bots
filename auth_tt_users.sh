@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/bash -x
 source config
 
 SQL_ALL_DATA="SELECT * FROM "$DB_TABLE""
@@ -17,36 +17,50 @@ execute_sql "$SQL_ALL_DATA"
 echo "$result" | awk 'FNR>2' | sed '$d' |
 while read LINE
 do
-	phone=$(echo "$LINE" | awk -F'|' '{print $2}')
-	pass=$(echo "$LINE" | awk -F'|' '{print $3}')
-  api_id=$(echo "$LINE" | awk -F'|' '{print $4}')
-  api_hash=$(echo "$LINE" | awk -F'|' '{print $5}')
+	phone=$(echo "$LINE" | awk -F'|' '{print $2}' | sed 's/^.//' | sed 's/.$//')
+	pass=$(echo "$LINE" | awk -F'|' '{print $3}' | sed 's/^.//' | sed 's/.$//')
+  api_id=$(echo "$LINE" | awk -F'|' '{print $4}' | sed 's/^.//' | sed 's/.$//')
+  api_hash=$(echo "$LINE" | awk -F'|' '{print $5}' | sed 's/^.//' | sed 's/.$//')
 
 
 
 # Відправлення запиту на отримання коду підтвердження
 CODE_REQUEST=$(curl -s -X POST "https://my.telegram.org/auth/send_password" -d "phone=$phone&api_id=$api_id&api_hash=$api_hash")
+if [ "$CODE_REQUEST" == "Sorry, too many tries. Please try again later." ]; then
+		exit 1
+fi
 
-CODE=$(echo $CODE_REQUEST | jq -r '.random_id')
+CODE=$(echo $CODE_REQUEST | awk -F'[:,]' '{gsub(/[ \t"{}]/, ""); print $2}')
+result="$?"
+echo "$CODE"
 
 
+if [ "$result" -gt 0 ]; then
+		exit 1
+fi
 
 
 
 # Введення коду підтвердження
-read -p "Введіть код підтвердження: " AUTH_CODE
-
+read -p "Введіть код підтвердження: " AUTH_CODE < /dev/tty
+echo "$AUTH_CODE"
 
 AUTH_RESPONSE=$(curl -s -X POST "https://my.telegram.org/auth/login" \
   -d "phone=$phone" \
   -d "random_id=$CODE" \
-  -d "password=$AUTH_CODE" \
-  -d "api_id=$api_id" \
-  -d "api_hash=$api_hash")
+  -d "password=$AUTH_CODE")
 
-# Відправлення запиту на авторизацію
+
+#AUTH_RESPONSE=$(curl -s -X POST "https://my.telegram.org/auth/login" \
+#  -d "phone=$phone" \
+#  -d "random_id=$CODE" \
+#  -d "password=$AUTH_CODE" \
+#  -d "api_id=$api_id" \
+#  -d "api_hash=$api_hash")
+#
+## Відправлення запиту на авторизацію
 #AUTH_RESPONSE=$(curl -s -X POST "https://my.telegram.org/auth/login" -d "phone=$phone&random_id=$CODE&password=$AUTH_CODE")
-
+#
 # Вивід результату авторизації
 echo $AUTH_RESPONSE
 
